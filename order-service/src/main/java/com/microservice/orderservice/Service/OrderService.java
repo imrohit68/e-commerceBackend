@@ -2,9 +2,8 @@ package com.microservice.orderservice.Service;
 
 import com.microservice.orderservice.Dto.InventoryResponse;
 import com.microservice.orderservice.Dto.OrderDto;
-import com.microservice.orderservice.Dto.OrderLineItemsDto;
-import com.microservice.orderservice.Entity.Orders;
 import com.microservice.orderservice.Entity.OrderLineItems;
+import com.microservice.orderservice.Entity.Orders;
 import com.microservice.orderservice.Repo.orderRepo;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -25,7 +23,7 @@ import java.util.stream.Collectors;
 @Transactional
 public class OrderService {
     private final orderRepo orderRepo;
-    private final WebClient webClient;
+    private final WebClient.Builder webClientBuilder;
     private final ModelMapper modelMapper;
     public void placeOrder(OrderDto orderDto){
         Orders order = new Orders();
@@ -33,14 +31,15 @@ public class OrderService {
         List<OrderLineItems> orderLineItems = orderDto.getOrderLineItemsDtoList().stream().map(orderLineItemsDto -> modelMapper.map(orderLineItemsDto,OrderLineItems.class)).collect(Collectors.toList());
         order.setOrderLineItems(orderLineItems);
 
-        List<String> skuCodes = order.getOrderLineItems().stream().map(orderLineItems2 -> orderLineItems2.getSkuCode()).toList();
+        List<String> skuCodes = order.getOrderLineItems().stream().map(OrderLineItems::getSkuCode).toList();
 
-      InventoryResponse[] inventoryResponses = webClient.get()
-                        .uri("http://localhost:8082/api/inventory",uriBuilder -> uriBuilder.queryParam("skuCode",skuCodes).build())
+      InventoryResponse[] inventoryResponses = webClientBuilder.build().get()
+                        .uri("http://inventory-service/api/inventory",uriBuilder -> uriBuilder.queryParam("skuCode",skuCodes).build())
                                 .retrieve()
                                         .bodyToMono(InventoryResponse[].class)
                                                 .block();
-      boolean result = Arrays.stream(inventoryResponses).allMatch(inventoryResponse -> inventoryResponse.isInStock());
+        assert inventoryResponses != null;
+        boolean result = Arrays.stream(inventoryResponses).allMatch(InventoryResponse::isInStock);
       if(result){
           orderRepo.save(order);
       }
